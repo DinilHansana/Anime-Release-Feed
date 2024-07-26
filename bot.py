@@ -3,6 +3,7 @@ from discord.ext import tasks, commands
 import feedparser
 from datetime import datetime, timezone, timedelta
 import pytz
+import time
 
 LOCAL_TIMEZONE = pytz.timezone('Asia/Colombo')  # Replace with your local timezone
 
@@ -18,8 +19,8 @@ def fetch_releases():
     entries = []
     for entry in feed.entries:
         if entry.id not in posted_entries:
-            published = datetime.strptime(entry.published, "%a, %d %b %Y %H:%M:%S %z")
-            published = published.astimezone(LOCAL_TIMEZONE)
+            iso_format = time.strftime("%Y-%m-%dT%H:%M:%SZ", entry.published_parsed)
+            published = datetime.fromisoformat(iso_format)
             entries.append({
                 "title": entry.title,
                 "link": entry.link,
@@ -33,8 +34,8 @@ def fetch_releases():
 async def check_releases():
     releases = fetch_releases()
     for release in releases:
-        embed = discord.Embed(title=release["title"], url=release["link"], description=release["description"])
-        embed.set_footer(text=release["published"].strftime("%Y-%m-%d %H:%M:%S %Z"))
+        embed = discord.Embed(title=release["title"], url=release["link"], description=release["description"], timestamp=release["published"])
+        embed.set_footer(text="Anime Release Feed")
         channel = client.get_channel(channel_id)
         await channel.send(embed=embed)
 
