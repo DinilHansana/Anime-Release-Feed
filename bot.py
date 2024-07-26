@@ -1,69 +1,46 @@
 import discord
-import requests
-from bs4 import BeautifulSoup
-import asyncio
-import datetime
+from discord.ext import tasks, commands
+import feedparser
+from datetime import datetime, timezone, timedelta
+import pytz
 
-TOKEN = ''
-CHANNEL_ID = ''
-ANIMEPAHE_URL = 'https://animepahe.ru'
+LOCAL_TIMEZONE = pytz.timezone('Asia/Colombo')  # Replace with your local timezone
 
 intents = discord.Intents.default()
-intents.messages = True  # Enable the message intent
-intents.typing = False   # You can adjust these intents as needed
-
 client = discord.Client(intents=intents)
 
-async def check_new_uploads():
-    await client.wait_until_ready()
-    channel = client.get_channel(int(CHANNEL_ID))
-    last_link = ""
-    refresh_interval = 3600  # Interval in seconds (1 hour)
-    
-    countdown_message = None
-    
-    while not client.is_closed():
-        try:
-            response = requests.get(ANIMEPAHE_URL)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # CSS Selector for the latest upload element
-            latest_upload = soup.select_one('.latest-release .episode-list-row .episode-wrap')
-            
-            if latest_upload:
-                latest_title_element = latest_upload.select_one('.episode-title a')
-                latest_title = latest_title_element.get_text()
-                latest_link = latest_title_element['href']
-                latest_episode = latest_upload.select_one('.episode-number-wrap').get_text()
+channel_id = "Channel ID of Your Choice"  # Replace with your channel ID
+feed_url = "http://www.livechart.me/feeds/episodes"
+posted_entries = set()  # To keep track of posted entries
 
-                if latest_link != last_link:
-                    await channel.send(f"New upload: {latest_title} - Episode {latest_episode}\nLink: {ANIMEPAHE_URL}{latest_link}")
-                    last_link = latest_link
-            else:
-                # No latest episode found
-                await channel.send("No latest episode found.")
-            
-            # Calculate countdown timer until next refresh
-            countdown = refresh_interval
-            while countdown > 0:
-                minutes, seconds = divmod(countdown, 60)
-                if countdown % 60 == 0 or countdown == refresh_interval:
-                    if countdown_message:
-                        await countdown_message.edit(content=f"Next refresh in {minutes} minutes and {seconds} seconds.")
-                    else:
-                        countdown_message = await channel.send(f"Next refresh in {minutes} minutes and {seconds} seconds.")
-                await asyncio.sleep(1)  # Sleep for 1 second
-                countdown -= 1
+def fetch_releases():
+    feed = feedparser.parse(feed_url)
+    entries = []
+    for entry in feed.entries:
+        if entry.id not in posted_entries:
+            published = datetime.strptime(entry.published, "%a, %d %b %Y %H:%M:%S %z")
+            published = published.astimezone(LOCAL_TIMEZONE)
+            entries.append({
+                "title": entry.title,
+                "link": entry.link,
+                "published": published,
+                "description": entry.get("description", "No description available."),
+            })
+            posted_entries.add(entry.id)
+    return entries
 
-        except Exception as e:
-            print(f"Error: {e}")
-
-        await asyncio.sleep(refresh_interval)
+@tasks.loop(minutes=1)
+async def check_releases():
+    releases = fetch_releases()
+    for release in releases:
+        embed = discord.Embed(title=release["title"], url=release["link"], description=release["description"])
+        embed.set_footer(text=release["published"].strftime("%Y-%m-%d %H:%M:%S %Z"))
+        channel = client.get_channel(channel_id)
+        await channel.send(embed=embed)
 
 @client.event
 async def on_ready():
     print(f'We have logged in as {client.user}')
-    client.loop.create_task(check_new_uploads())
+    check_releases.start()
 
-if __name__ == '__main__':
-    asyncio.run(client.start(TOKEN))
+client.run("Your Bot Token")
