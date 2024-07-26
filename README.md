@@ -43,7 +43,7 @@ Before running the bot, ensure you have Python installed and the necessary libra
 
 ## Usage
 
-The bot will log in to your Discord server and start checking for new anime releases every 10 minutes. If a new release is found, it will post an update to the specified Discord channel.
+The bot will log in to your Discord server and start checking for new anime releases every 1 minutes. If a new release is found, it will post an update to the specified Discord channel.
 
 ## Contributing
 
